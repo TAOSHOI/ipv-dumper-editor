@@ -1,0 +1,71 @@
+# .ipv event stream: strokes, fills, points — RE notes
+
+Companion to [IPV_FORMAT.md](https://github.com/GGgoBRO/Ibis-.ipv-editor/blob/main/IPV_FORMAT.md)
+(container, RPNG, footer). That spec covers the document *state*; this one covers the
+*event stream*. Container framing was reverse-engineered independently and matches byte-for-byte.
+
+**Legend:** ✅ round-trip verified (parse → encode is byte-identical after a JSON pass) ·
+🟡 working hypothesis · ❓ unknown.
+All numbers **big-endian**. Times are `f64` unix seconds. Record type ids below are
+`u32 = kind<<24 | type<<8 | sub`, i.e. `(2,3)` = `0x02000300`.
+
+**Tested on:** ibisPaint X `<13.X.X>` (Android), the author's own files.
+
+## Stroke envelope `(2,3)` = 0x02000300 — structure ✅
+
+| offset | type | field | status |
+|---|---|---|---|
+| 0 | f64 | ts_start | ✅ |
+| 8 | f64 | ts_end | ✅ |
+| 16 | u32 | tool_mode | 🟡 name |
+| 20 | u32 | brush_shape | 🟡 name |
+| 24 | u32 | tool_category (e.g. 0x7000) | 🟡 name |
+| 28 | u32 | color, bytes read as RRGGBBAA | 🟡 byte order |
+| 32 | u32 | target layer id | ✅ matches layer ids |
+| 36 | u32 | point count n | ✅ |
+
+Then `n × point subframes (2,3,sub1)`, then the brush tail (below).
+
+## Point `(2,3,sub1)` = 0x02000301
+
+Payload: `f64 t, f32 x, f32 y` (canvas pixels) ✅.
+Payload length (`sl`) is **16 or 20+** — both observed; all points of one stroke share `sl` ✅.
+With `sl ≥ 20` the first extra `f32` behaves like **pressure** (0..1) 🟡.
+Note: the companion spec says "No pressure is stored" — possibly version/stylus dependent.
+Confirmation across app versions is welcome.
+
+## Brush tail
+
+Nested records ✅ framing: `(1,2,sub2)` brush parameters (292/305 bytes observed)
++ `(2,3,sub3)` (~30 bytes). Semantics mostly 🟡/❓.
+Brush **size** candidates (both exposed as experimental hints by the dumper):
+- `f32` at **+12** of the brush record 🟡 (per companion spec);
+- last `f32` of the whole tail — **likely wrong**: it lands inside the `(2,3,sub3)` record.
+
+## Bucket fill `(2,4)` = 0x02000400 — structure ✅
+
+```
+f64 ts_start | f64 ts_end | u32 n1 | n1 × point
+u32 color (RRGGBBAA 🟡) | u32 n2 | n2 × point
+rest: +4 f32 tolerance 🟡; later a repeat of ts_end followed by u32 tag 🟡
+      (tag matched a stroke layer id in most observed fills)
+```
+
+Seed points are the tap locations. `n2` list purpose ❓ (same point repeated in samples).
+
+## Observed, not yet decoded ❓
+
+`(2,8)` selection lasso · `(2,9)` fx/filter · `(2,10)` ruler · `(2,12)` + `(2,12,3)` liquify.
+The dumper preserves them byte-exact as `raw`.
+
+## Method
+
+Every ✅ above means: parsed fields re-encode to the exact original bytes *after* a JSON
+round-trip (this catches NaN-bit and float-precision traps). Semantic names may still be 🟡.
+Unknown records are never guessed — they are stored verbatim, so `dump → build` is always lossless.
+
+## Test files that would settle the unknowns
+
+Same canvas, one change per file: one finger stroke vs one stylus stroke (pressure);
+one stroke with brush size changed (size offset); one fill with tolerance changed;
+one fill on a named layer (tag).

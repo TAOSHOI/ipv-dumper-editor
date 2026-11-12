@@ -66,7 +66,7 @@ Format notes for the event stream (strokes / fills / pressure): [docs/IPV_FORMAT
 
 ~~~
 python tests/test_roundtrip.py
-```
+~~~
 
 Builds a synthetic .ipv (gaps, unknown records, NaN-bit trap, RPNG-embedded PNG)
 and checks round-trip, raw fallback, preset filtering and compose. Stdlib only.
@@ -81,4 +81,5 @@ match byte-for-byte. This project focuses on the complementary half: the event s
 Unofficial tool, not affiliated with ibis Inc. Use it with your own files.
 
 ## License
-   Apache-2.0
+
+Apache-2.0
